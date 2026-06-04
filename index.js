@@ -50,9 +50,9 @@ async function handleMessage(event) {
             replyText = msg && msg.text ? msg.text : '目前沒有作業資料';
         } 
         else if (text.includes('課表')) {
-            const msg = await getCourses();
+            const msg = await getCourses(text);
             replyText = msg && msg.text ? msg.text : '目前沒有課表';
-        } 
+        }
         else {
             const aiReply = await callHuggingFace(text);
             replyText = aiReply;
@@ -86,15 +86,120 @@ async function getAssignments() {
     }
 }
 
-async function getCourses() {
-    return new Promise(resolve => {
-        db.all("SELECT * FROM courses LIMIT 5", [], (err, rows) => {
-            if (err || !rows.length) return resolve({ type: 'text', text: '目前沒有課表' });
-            let msg = "📅 課表\n\n";
-            rows.forEach(r => msg += `🕒 ${r.time} ${r.name}\n`);
-            resolve({ type: 'text', text: msg });
+const WEEKDAY = ['', '一', '二', '三', '四', '五', '六', '日'];
+
+// 簡稱 → 資料庫 department 關鍵字（LIKE）
+const DEPT_ALIASES = {
+    '中文': '中國文學',
+    '企管': '企業管理',
+    '德文': '德國文化',
+    '日文': '日本語文',
+    '外文': '外文',
+    '資科': '資料科學',
+    '資管': '資訊管理',
+    '財精': '財務工程',
+    '華語': '華語教學',
+    '社工': '社會工作',
+    '微生物': '微生物',
+};
+
+function parseTimetableQuery(text) {
+    const rest = text.replace(/課表/g, '').trim();
+    if (!rest) return { mode: 'list' };
+
+    const classMatch = rest.match(/([\u4e00-\u9fff0-9Ａ-ＺA-Z]+班)/);
+    if (classMatch) return { mode: 'class', keyword: classMatch[1] };
+
+    const deptMatch = rest.match(/([\u4e00-\u9fff]+(?:學系|學程|學院|系|院)?)/);
+    if (deptMatch) {
+        const kw = deptMatch[1].replace(/系$/, '');
+        return { mode: 'dept', keyword: kw };
+    }
+    return { mode: 'dept', keyword: rest };
+}
+
+async function resolveDepartment(keyword) {
+    const rows = await db.allAsync(
+        `SELECT DISTINCT department FROM timetable WHERE semester = '114-2' ORDER BY department`
+    );
+    const names = rows.map(r => r.department);
+    if (names.includes(keyword)) return keyword;
+    const alias = DEPT_ALIASES[keyword];
+    if (alias) {
+        const hit = names.find(d => d.includes(alias));
+        if (hit) return hit;
+    }
+    const hit = names.find(d => d.includes(keyword) || keyword.includes(d.replace(/學系|學院/g, '')));
+    return hit || null;
+}
+
+async function getCourses(text = '') {
+    try {
+        const q = parseTimetableQuery(text);
+
+        if (q.mode === 'list') {
+            const depts = await db.allAsync(`
+                SELECT department, COUNT(*) AS cnt
+                FROM timetable
+                WHERE semester = '114-2'
+                GROUP BY department
+                ORDER BY department
+            `);
+            if (!depts.length) {
+                return { type: 'text', text: '資料庫沒有 114-2 課表，請執行 import_to_db.py --replace' };
+            }
+            let msg = '📋 114-2 可查詢科系（共 ' + depts.length + ' 個）\n\n';
+            depts.forEach(d => {
+                msg += `• ${d.department}（${d.cnt} 筆）\n`;
+            });
+            msg += '\n請輸入：課表 資料科學系\n或：課表 資科一Ａ';
+            return { type: 'text', text: msg.trim() };
+        }
+
+        let sql = `
+            SELECT course_name, teacher, class_name, day_of_week, start_time, end_time, classroom, department
+            FROM timetable
+            WHERE semester = '114-2'
+        `;
+        const params = [];
+        let title = '';
+
+        if (q.mode === 'class') {
+            sql += ` AND class_name LIKE ?`;
+            params.push('%' + q.keyword + '%');
+            title = q.keyword;
+        } else {
+            const dept = await resolveDepartment(q.keyword);
+            if (!dept) {
+                return {
+                    type: 'text',
+                    text: `找不到「${q.keyword}」對應科系。\n請先傳「課表」看完整科系列表，或輸入「課表 資料科學系」。`,
+                };
+            }
+            sql += ` AND department = ?`;
+            params.push(dept);
+            title = dept;
+        }
+        sql += ` ORDER BY class_name, day_of_week, start_time LIMIT 80`;
+
+        const rows = await db.allAsync(sql, params);
+        if (!rows.length) {
+            return { type: 'text', text: `「${title}」在資料庫沒有課表（114-2）。` };
+        }
+
+        let msg = `📅 ${title} 課表（114-2）\n\n`;
+        rows.forEach(r => {
+            const wd = WEEKDAY[r.day_of_week] || '?';
+            msg += `【${r.class_name}】${r.course_name}\n`;
+            msg += `  週${wd} ${r.start_time}-${r.end_time} ${r.classroom || ''}\n`;
+            msg += `  ${r.teacher || '未定'}\n\n`;
         });
-    });
+        if (rows.length >= 80) msg += '（僅顯示前 80 筆）';
+        return { type: 'text', text: msg.trim() };
+    } catch (e) {
+        console.error('getCourses 錯誤:', e.message);
+        return { type: 'text', text: '查詢課表失敗' };
+    }
 }
 
 async function callHuggingFace(msg) {
