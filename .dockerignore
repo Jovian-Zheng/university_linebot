@@ -1,0 +1,26 @@
+# Ignore files not needed in Docker image for HF Spaces
+.git
+.gitignore
+*.md
+.env
+.env.example
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.log
+legacy-js/
+start_linebot.bat
+test_bot_logic.py
+inspect_db.py
+local_chat.py
+Dockerfile
+.dockerignore
+university_bot.db-journal
+*.db-journal
+.DS_Store
+Thumbs.db
