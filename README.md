@@ -93,7 +93,7 @@ python local_chat.py
      - `LINE_CHANNEL_ACCESS_TOKEN`
      - `LINE_CHANNEL_SECRET`
      - `HUGGINGFACE_API_TOKEN`
-   - （可選）新增 `PORT=7860`
+   - （可選）新增 `PORT=3000`
 
 5. **等待建置完成**
    - HF 會自動根據 `Dockerfile` 建置（使用 gunicorn + port 7860）。
@@ -113,6 +113,55 @@ python local_chat.py
    - 把你的 LINE Bot 加為好友
    - 傳送「課表」「餐廳」「公車」「幫助」測試精準功能
    - 傳送其他問題測試 Hugging Face AI 回覆（會自動帶入校園資料）
+
+### 如果 Space 已經創建好了（最常見問題）
+
+**重要提醒**：Hugging Face Space 的 **SDK**（Gradio / Streamlit / Docker 等）通常是在「建立 Space 時」就選定的。已經建立好的 Space 很難直接在設定裡改 SDK。
+
+如果你們已經創好 Space，但找不到「SDK」這個選項，或無法改成 Docker，請按照下面方式處理：
+
+#### 推薦做法：刪除舊 Space 後重新建立（最乾淨）
+
+1. **備份你的 Secrets**（重要！）
+   - 先去舊 Space 的 **Settings → Variables and secrets**，把三個 token 的值記下來或複製到記事本：
+     - `LINE_CHANNEL_ACCESS_TOKEN`
+     - `LINE_CHANNEL_SECRET`
+     - `HUGGINGFACE_API_TOKEN`
+
+2. **刪除舊 Space**
+   - 進入舊 Space → 右上角 **Settings** → 最下面找到紅色的 **Delete this Space**。
+   - 輸入 Space 名稱確認刪除（資料會消失，但 Secrets 你已經備份了）。
+
+3. **重新建立新 Space（選 Docker）**
+   - 回到 https://huggingface.co/spaces
+   - 點擊「Create new Space」
+   - Space 名稱可以用原本的，或取新名字
+   - **SDK** 這次一定要選擇 **Docker**
+   - 建立完成
+
+4. **後續設定（跟新建立一樣）**
+   - 連線 GitHub repo（Settings → Repository）
+   - 設定 Secrets（把剛剛備份的三個值貼上去）
+   - 上傳程式碼（Git push 或手動上傳 Dockerfile + app.py 等）
+   - 取得新網址後更新 LINE Webhook
+
+#### 如果不想刪除舊 Space（替代方案）
+
+- 直接建立一個**新的** Space（SDK 選 Docker），把程式碼連到新 Space。
+- 舊 Space 可以留著當備份或之後刪除。
+- 新 Space 的網址不同，記得更新 LINE 的 Webhook URL。
+
+#### 為什麼找不到 SDK 設定？
+
+- 很多現有 Space 在 Settings 裡只會顯示目前使用的 SDK，沒有「更改 SDK」的按鈕。
+- 這是 Hugging Face 的設計限制，SDK 變更通常需要重新建立 Space。
+- 你可以在 Settings 裡看到類似 "SDK: Gradio" 或 "SDK: Docker" 的顯示，但無法直接修改。
+
+**小建議**：
+- 建立新 Space 時，**務必在第一步就選 Docker**。
+- 建立後盡量用 GitHub repo 連線，之後只要 `git push` 就能更新，不用一直手動上傳。
+
+如果還是卡住，請告訴我你目前 Space 是什麼 SDK（可以在 Space 主頁或 Settings 看到），我再給你更精確的下一步。
 
 ### 注意事項
 
